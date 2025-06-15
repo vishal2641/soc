@@ -1,0 +1,49 @@
+# Mini SOC Setup on Ubuntu 22.04
+
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Java (required for ELK)
+sudo apt install openjdk-17-jdk -y
+
+# Add Elastic GPG Key and APT Repository
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -
+sudo apt install apt-transport-https -y
+echo "deb https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-8.x.list
+sudo apt update
+
+# Install Elasticsearch, Logstash, Kibana
+sudo apt install elasticsearch logstash kibana -y
+
+# Enable and start services
+sudo systemctl enable --now elasticsearch
+sudo systemctl enable --now logstash
+sudo systemctl enable --now kibana
+
+# Configure Logstash Input/Filter/Output
+sudo tee /etc/logstash/conf.d/beats.conf > /dev/null <<EOL
+input {
+  beats {
+    port => 5044
+  }
+}
+
+filter {
+  if [event][module] == "system" {
+    mutate { add_field => { "source_type" => "linux_syslog" } }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["localhost:9200"]
+    index => "%{[@metadata][beat]}-%{+YYYY.MM.dd}"
+  }
+}
+EOL
+
+sudo systemctl restart logstash
+
+# Print Kibana access info
+echo "Kibana is now accessible at http://<Your-Dell-IP>:5601"
+echo "Configure Filebeat/Winlogbeat on remote systems to forward logs to <Your-Dell-IP>:5044"
